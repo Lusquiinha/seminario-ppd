@@ -4,17 +4,99 @@ import plotly.graph_objects as go
 import plotly.express as px
 from pathlib import Path
 
-st.set_page_config(page_title="Comparação FPS - Ray Tracer", layout="wide")
+st.set_page_config(page_title="Comparação Ray Tracer - PPD", layout="wide")
 
 st.title("📊 Comparação de Desempenho: Ray Tracer")
-st.markdown("### Sequencial vs OpenMP vs CUDA")
+st.markdown("### Análise Completa - Geração de Imagem e Interativo")
 
-# Define o diretório correto
+# Define os diretórios corretos
 script_dir = Path(__file__).parent
+
+# Todos os arquivos estão no diretório benchmark
 fps_seq_path = script_dir / 'fps_seq.txt'
 fps_omp_path = script_dir / 'fps_omp.txt'
 fps_omp_static_path = script_dir / 'fps_omp_static.txt'
 fps_cuda_path = script_dir / 'fps_cuda.txt'
+time_raytracer_path = script_dir / 'time_raytracer.txt'
+
+st.markdown("---")
+
+# ============ SEÇÃO 1: GERAÇÃO DE IMAGEM ============
+st.header("Geração de Imagem")
+
+if time_raytracer_path.exists():
+    try:
+        df_time = pd.read_csv(time_raytracer_path)
+        
+        col1, col2, col3 = st.columns(3)
+        
+        time_seq = df_time[df_time['tipo'] == 'seq']['time(s)'].values[0] if 'seq' in df_time['tipo'].values else None
+        time_omp = df_time[df_time['tipo'] == 'omp']['time(s)'].values[0] if 'omp' in df_time['tipo'].values else None
+        
+        with col1:
+            if time_seq:
+                st.metric("Tempo - Sequencial", f"{time_seq:.3f}s")
+        
+        with col2:
+            if time_omp:
+                st.metric("Tempo - OpenMP", f"{time_omp:.3f}s")
+        
+        with col3:
+            if time_seq and time_omp:
+                speedup = time_seq / time_omp
+                st.metric("Speedup OpenMP/Seq", f"{speedup:.2f}x")
+        
+        # Gráfico de barras
+        fig_bar = go.Figure()
+        
+        if time_seq:
+            fig_bar.add_trace(go.Bar(
+                name='Sequencial',
+                x=['Tempo de Execução'],
+                y=[time_seq],
+                marker_color='#d62728',
+                text=[f"{time_seq:.3f}s"],
+                textposition='auto'
+            ))
+        
+        if time_omp:
+            fig_bar.add_trace(go.Bar(
+                name='OpenMP',
+                x=['Tempo de Execução'],
+                y=[time_omp],
+                marker_color='#1f77b4',
+                text=[f"{time_omp:.3f}s"],
+                textposition='auto'
+            ))
+        
+        fig_bar.update_layout(
+            title="Tempo de Execução - Geração de Imagem",
+            yaxis_title="Tempo (segundos)",
+            height=400,
+            barmode='group'
+        )
+        
+        st.plotly_chart(fig_bar, use_container_width=True)
+        
+    except Exception as e:
+        st.warning(f"⚠️ Erro ao ler dados de imagem: {e}")
+else:
+    st.info("""
+    📌 Adicione o arquivo `time_raytracer.txt` neste diretório (`benchmark/`) com o formato:
+    
+    ```csv
+    time(s),tipo
+    2.043,seq
+    0.729,omp
+    ```
+    
+    Execute os programas de geração de imagem no diretório `imagem/` e meça os tempos.
+    """)
+
+st.markdown("---")
+
+# ============ AY TRACER INTERATIVO ============
+st.header("Ray Tracer Interativo")
 
 # Tenta ler os arquivos
 try:
@@ -39,13 +121,13 @@ try:
         names.append('CUDA')
     
     if not dfs:
-        st.error("❌ Nenhum arquivo de FPS encontrado. Execute os programas primeiro!")
+        st.error("❌ Nenhum arquivo de FPS encontrado. Execute os programas e copie os arquivos para `benchmark/`!")
         st.info("""
-        **Executar os programas:**
-        - `./rayview_seq` (Sequencial - sem OpenMP)
-        - `./rayview_omp` (OpenMP Dynamic - paralelo CPU)
-        - `./rayview_omp_static` (OpenMP Static - paralelo CPU)
-        - `./rayview_cuda` (CUDA - paralelo GPU)
+        **Os arquivos esperados no diretório `benchmark/`:**
+        - `fps_seq.txt` - Sequencial
+        - `fps_omp.txt` - OpenMP Dynamic
+        - `fps_omp_static.txt` - OpenMP Static  
+        - `fps_cuda.txt` - CUDA
         """)
         st.stop()
     
@@ -88,8 +170,6 @@ try:
                     "Speedup OMP/Seq",
                     f"{speedup:.2f}x"
                 )
-    
-    st.markdown("---")
     
     # Gráfico de linha comparativo
     st.subheader("📈 FPS ao Longo do Tempo")
@@ -179,29 +259,11 @@ try:
 except FileNotFoundError as e:
     st.error(f"❌ Arquivo não encontrado: {e}")
     st.info("""
-    **Como gerar os arquivos:**
-    
-    1. Execute a versão Sequencial:
-       ```bash
-       ./rayview_seq
-       ```
-    
-    2. Execute a versão OpenMP Dynamic:
-       ```bash
-       ./rayview_omp
-       ```
-    
-    3. Execute a versão OpenMP Static:
-       ```bash
-       ./rayview_omp_static
-       ```
-    
-    4. Execute a versão CUDA:
-       ```bash
-       ./rayview_cuda
-       ```
-    
-    5. Execute este dashboard novamente.
+    **Certifique-se de que os arquivos de FPS estão no diretório `benchmark/`:**
+    - `fps_seq.txt`
+    - `fps_omp.txt`
+    - `fps_omp_static.txt`
+    - `fps_cuda.txt`
     """)
 except Exception as e:
     st.error(f"❌ Erro ao processar os dados: {e}")
