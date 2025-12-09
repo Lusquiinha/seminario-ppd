@@ -5,7 +5,8 @@
 #include <SDL2/SDL.h>
 #include <cuda_runtime.h>
 
-// compilar: nvcc -O2 -ccbin g++-10 -o rayview_cuda raytracer_interativo.cu -lm `sdl2-config --cflags --libs`
+// compilar-cuda: nvcc -O3 -ccbin g++-10 -o rayview_cuda raytracer_interativo.cu -lm `sdl2-config --cflags --libs`
+// compilar-cuda-omp: nvcc -O3 -Xcompiler -fopenmp -ccbin g++-10 -o rayview_cuda raytracer_interativo.cu -lm `sdl2-config --cflags --libs`
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -616,7 +617,7 @@ int main(int argc, char *argv[]) {
         render(image, d_image, WIDTH, HEIGHT, numSpheres, &cam);
         
         // ======== Converte Vec3f para RGB8 ========
-        #pragma omp parallel for
+        #pragma omp parallel for schedule(static)
         for (int i = 0; i < WIDTH * HEIGHT; ++i) {
             Uint8 r = (Uint8)(clampf(image[i].x, 0.0f, 1.0f) * 255.0f);
             Uint8 g = (Uint8)(clampf(image[i].y, 0.0f, 1.0f) * 255.0f);
