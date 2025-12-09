@@ -95,8 +95,8 @@ else:
 
 st.markdown("---")
 
-# ============ AY TRACER INTERATIVO ============
-st.header("Ray Tracer Interativo")
+# ============ RAY TRACER INTERATIVO ============
+st.header("Interativo")
 
 # Tenta ler os arquivos
 try:
