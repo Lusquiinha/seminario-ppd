@@ -1,0 +1,792 @@
+\documentclass[aspectratio=169]{beamer}
+\usepackage[utf8]{inputenc}
+\usepackage[brazilian]{babel}
+\usepackage{graphicx}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{booktabs}
+\usepackage{amsmath}
+
+% Tema
+\usetheme{Madrid}
+\usecolortheme{default}
+
+% Configuração de código
+\lstset{
+    language=C++,
+    basicstyle=\tiny\ttfamily,
+    keywordstyle=\color{blue},
+    commentstyle=\color{green!50!black},
+    stringstyle=\color{red},
+    numbers=left,
+    numberstyle=\tiny,
+    breaklines=true,
+    frame=single,
+    tabsize=2,
+    literate={ã}{a}1 {á}{a}1 {é}{e}1 {í}{i}1 {ó}{o}1 {ú}{u}1 {ç}{c}1 
+             {Ã}{A}1 {Á}{A}1 {É}{E}1 {Í}{I}1 {Ó}{O}1 {Ú}{U}1 {Ç}{C}1
+}
+
+% Informações do título
+\title[Ray Tracing Paralelo]{Paralelização de Ray Tracer com OpenMP e CUDA}
+\subtitle{Programação Paralela e Distribuída}
+\author{Seu Nome}
+\institute{Universidade}
+\date{\today}
+
+\begin{document}
+
+% Slide de título
+\begin{frame}
+    \titlepage
+\end{frame}
+
+% Sumário
+\begin{frame}{Sumário}
+    \tableofcontents
+\end{frame}
+
+% Introdução
+\section{Introdução}
+
+\begin{frame}{O que é Ray Tracing?}
+    \begin{columns}
+        \column{0.5\textwidth}
+        \begin{itemize}
+            \item Técnica de renderização que simula o caminho da luz
+            \item Produz imagens fotorrealísticas
+            \item Computacionalmente intensivo
+            \item Ideal para paralelização
+        \end{itemize}
+        
+        \column{0.5\textwidth}
+        \begin{block}{Características}
+            \begin{itemize}
+                \item Reflexões
+                \item Refrações
+                \item Sombras
+                \item Iluminação global
+            \end{itemize}
+        \end{block}
+    \end{columns}
+\end{frame}
+
+\begin{frame}{Motivação}
+    \begin{itemize}
+        \item Ray tracing é \textbf{embaraçosamente paralelo}
+        \item Cada pixel pode ser calculado independentemente
+        \item Grande oportunidade para explorar diferentes paradigmas de paralelização
+        \item Comparação entre CPU (OpenMP) e GPU (CUDA)
+    \end{itemize}
+    
+    \vspace{0.5cm}
+    
+    \begin{alertblock}{Objetivo}
+        Acelerar a renderização de cenas 3D através de paralelização e criar uma versão interativa para visualização em tempo real.
+    \end{alertblock}
+\end{frame}
+
+% Implementação Sequencial
+\section{Implementação Base}
+
+\begin{frame}[fragile]{Código Sequencial - raytracer.cpp}
+    \begin{block}{Estrutura Principal}
+        \begin{itemize}
+            \item Classe \texttt{Vec3} para vetores 3D
+            \item Classe \texttt{Sphere} para objetos da cena
+            \item Função \texttt{trace()} - algoritmo recursivo de ray tracing
+            \item Função \texttt{render()} - loop principal sobre pixels
+        \end{itemize}
+    \end{block}
+    
+    \begin{lstlisting}[language=C++]
+void render(Vec3f* image, unsigned width, unsigned height, 
+            const std::vector<Sphere> &spheres) {
+    Vec3f *pixel = image;
+    for (unsigned y = 0; y < height; ++y) {
+        for (unsigned x = 0; x < width; ++x, ++pixel) {
+            // Calcula raio para cada pixel
+            *pixel = trace(rayorig, raydir, spheres, 0);
+        }
+    }
+}
+    \end{lstlisting}
+\end{frame}
+
+\begin{frame}{Características da Versão Sequencial}
+    \begin{itemize}
+        \item Resolução configurável (leitura via stdin)
+        \item Suporte a múltiplas esferas e fontes de luz
+        \item Recursão para reflexões e refrações (até 5 níveis)
+        \item Saída em formato PPM
+    \end{itemize}
+    
+    \vspace{0.5cm}
+    
+    \begin{block}{Limitações}
+        \begin{itemize}
+            \item Tempo de renderização elevado para resoluções altas
+            \item Uso de apenas um núcleo da CPU
+            \item Não permite visualização em tempo real
+        \end{itemize}
+    \end{block}
+\end{frame}
+
+% OpenMP
+\section{Paralelização com OpenMP}
+
+\begin{frame}[fragile]{OpenMP - raytracer\_omp.cpp}
+    \begin{block}{Modificação Mínima}
+        Adição de uma única diretiva de compilação
+    \end{block}
+    
+    \begin{lstlisting}[language=C++]
+void render(Vec3f* image, unsigned width, unsigned height, 
+            const std::vector<Sphere> &spheres) {
+    float invWidth = 1 / float(width), invHeight = 1 / float(height);
+    float fov = 30, aspectratio = width / float(height);
+    float angle = tan(M_PI * 0.5 * fov / 180.);
+    
+    #pragma omp parallel for schedule(dynamic)
+    for (unsigned y = 0; y < height; ++y) {
+        Vec3f *pixel = &image[y*width];
+        for (unsigned x = 0; x < width; ++x, ++pixel) {
+            // Renderizacao de cada pixel
+        }
+    }
+}
+    \end{lstlisting}
+\end{frame}
+
+\begin{frame}{OpenMP - Características}
+    \begin{columns}
+        \column{0.5\textwidth}
+        \begin{block}{Vantagens}
+            \begin{itemize}
+                \item Implementação simples
+                \item Uma linha de código
+                \item Schedule dinâmico
+                \item Boa escalabilidade em CPU
+            \end{itemize}
+        \end{block}
+        
+        \column{0.5\textwidth}
+        \begin{block}{Detalhes Técnicos}
+            \begin{itemize}
+                \item Paralelização por linhas
+                \item \texttt{schedule(dynamic)} para balanceamento
+                \item Cada thread processa linhas completas
+                \item Sem race conditions
+            \end{itemize}
+        \end{block}
+    \end{columns}
+    
+    \vspace{0.5cm}
+    
+    \begin{alertblock}{Compilação}
+        \texttt{g++ -O3 -fopenmp -o raytracer\_omp raytracer\_omp.cpp}
+    \end{alertblock}
+\end{frame}
+
+% CUDA
+\section{Paralelização com CUDA}
+
+\begin{frame}[fragile]{CUDA - raytracer\_interativo.cu}
+    \begin{block}{Kernel CUDA}
+        Função executada na GPU por milhares de threads simultaneamente
+    \end{block}
+    
+    \begin{lstlisting}[language=C++]
+__global__ void render_kernel(Vec3f *image, unsigned width, 
+                              unsigned height, int numSpheres,
+                              Camera cam, float invWidth, 
+                              float invHeight, float angle,
+                              float angleAspect) {
+    unsigned x = blockIdx.x * blockDim.x + threadIdx.x;
+    unsigned y = blockIdx.y * blockDim.y + threadIdx.y;
+    
+    if (x >= width || y >= height) return;
+    
+    // Calcula direcao do raio
+    Vec3f raydir = vec_add(cam.forward, 
+                   vec_add(vec_mul_scalar(cam.right, xx),
+                           vec_mul_scalar(cam.up, yy)));
+    raydir = vec_normalize(raydir);
+    
+    image[y * width + x] = trace(cam.pos, raydir, 
+                                  d_const_spheres, numSpheres, 0);
+}
+    \end{lstlisting}
+\end{frame}
+
+\begin{frame}{CUDA - Otimizações}
+    \begin{itemize}
+        \item \textbf{Memória Constante}: Esferas armazenadas em \texttt{\_\_constant\_\_}
+        \begin{itemize}
+            \item Acesso mais rápido para dados read-only
+            \item Cache dedicado
+        \end{itemize}
+        
+        \item \textbf{Grid 2D}: Blocos de 16x16 threads
+        \begin{itemize}
+            \item Mapeamento direto pixel $\leftrightarrow$ thread
+            \item Otimizado para warps (32 threads)
+        \end{itemize}
+        
+        \item \textbf{Funções Device}: \texttt{\_\_device\_\_} para operações vetoriais
+        
+        \item \textbf{Transferência de Dados}: Minimizada ao essencial
+    \end{itemize}
+    
+    \vspace{0.3cm}
+    
+    \begin{alertblock}{Compilação}
+        \texttt{nvcc -O3 -o rayview\_cuda raytracer\_interativo.cu `sdl2-config --cflags --libs`}
+    \end{alertblock}
+\end{frame}
+
+% Versão Interativa
+\section{Versão Interativa}
+
+\begin{frame}{Ray Tracer Interativo}
+    \begin{block}{Funcionalidades}
+        \begin{itemize}
+            \item Visualização em tempo real usando SDL2
+            \item Navegação 3D pela cena
+            \item Controles de câmera (movimento e rotação)
+            \item Renderização contínua (loop de jogo)
+        \end{itemize}
+    \end{block}
+    
+    \begin{columns}
+        \column{0.5\textwidth}
+        \begin{block}{Controles}
+            \begin{itemize}
+                \item W/S: Frente/Trás
+                \item A/D: Esquerda/Direita
+                \item Q/E: Cima/Baixo
+                \item Setas: Rotação
+                \item Mouse: Look around
+            \end{itemize}
+        \end{block}
+        
+        \column{0.5\textwidth}
+        \begin{block}{Implementações}
+            \begin{itemize}
+                \item \texttt{raytracer\_interativo.c} (Seq/OpenMP)
+                \item \texttt{raytracer\_interativo.cu} (CUDA)
+                \item Resolução: 1280x720
+                \item Medição de FPS
+            \end{itemize}
+        \end{block}
+    \end{columns}
+\end{frame}
+
+\begin{frame}[fragile]{Sistema de Câmera}
+    \begin{lstlisting}[language=C]
+typedef struct {
+    Vec3f pos;       // Posicao da camera
+    Vec3f forward;   // Direcao para frente
+    Vec3f right;     // Direcao para direita
+    Vec3f up;        // Direcao para cima
+    float pitch;     // Rotacao vertical (radianos)
+    float yaw;       // Rotacao horizontal (radianos)
+} Camera;
+
+void camera_update_vectors(Camera *cam) {
+    // Calcula forward baseado em yaw e pitch
+    cam->forward.x = cosf(cam->pitch) * sinf(cam->yaw);
+    cam->forward.y = sinf(cam->pitch);
+    cam->forward.z = -cosf(cam->pitch) * cosf(cam->yaw);
+    cam->forward = vec_normalize(cam->forward);
+    
+    // Calcula right e up com produtos vetoriais
+    Vec3f worldUp = { 0.0f, 1.0f, 0.0f };
+    cam->right = vec_cross(cam->forward, worldUp);
+    cam->up = vec_cross(cam->right, cam->forward);
+}
+    \end{lstlisting}
+\end{frame}
+
+\begin{frame}{raytracer\_interativo.c - Versão Unificada}
+    \begin{block}{Características}
+        O arquivo \texttt{raytracer\_interativo.c} suporta ambas as versões:
+    \end{block}
+    
+    \begin{columns}
+        \column{0.5\textwidth}
+        \begin{block}{Sequencial}
+            \small
+            Compilação sem OpenMP:
+            
+            \texttt{gcc -O3 raytracer\_interativo.c}
+            
+            \vspace{0.2cm}
+            
+            \begin{itemize}
+                \item Um único núcleo
+                \item Renderização lenta
+                \item Baseline para comparação
+            \end{itemize}
+        \end{block}
+        
+        \column{0.5\textwidth}
+        \begin{block}{OpenMP}
+            \small
+            Compilação com OpenMP:
+            
+            \texttt{gcc -O3 -fopenmp raytracer\_interativo.c}
+            
+            \vspace{0.2cm}
+            
+            \begin{itemize}
+                \item Múltiplos núcleos
+                \item Schedule dynamic
+                \item 6.56x mais rápido
+            \end{itemize}
+        \end{block}
+    \end{columns}
+    
+    \vspace{0.3cm}
+    
+    \begin{alertblock}{Flexibilidade}
+        Mesmo código fonte serve para ambas versões - flag \texttt{-fopenmp} ativa paralelização
+    \end{alertblock}
+\end{frame}
+
+% Resultados
+\section{Resultados}
+
+\subsection{Renderização de Imagem Estática}
+
+\begin{frame}{Teste 1: Renderização Estática (3840x2160)}
+    \begin{block}{Configuração do Teste}
+        \begin{itemize}
+            \item Resolução: \textbf{3840x2160} (4K) - 8.294.400 pixels
+            \item Entrada: \texttt{input.in} com 3 esferas e 1 luz
+            \item Saída: Arquivo PPM (\texttt{image.ppm})
+            \item Métrica: Tempo total de renderização
+        \end{itemize}
+    \end{block}
+    
+    \vspace{0.3cm}
+    
+    \begin{columns}
+        \column{0.5\textwidth}
+        \begin{table}
+            \centering
+            \begin{tabular}{lcc}
+                \toprule
+                \textbf{Versão} & \textbf{Tempo (s)} & \textbf{$\mu$s/pixel} \\
+                \midrule
+                Sequencial & 2.043 & 0.246 \\
+                OpenMP & 0.729 & 0.088 \\
+                \bottomrule
+            \end{tabular}
+        \end{table}
+        
+        \column{0.5\textwidth}
+        \begin{alertblock}{Speedup}
+            OpenMP: \textbf{2.80x} mais rápido
+            
+            \vspace{0.2cm}
+            
+            Redução de tempo: \textbf{64.3\%}
+            
+            \vspace{0.2cm}
+            
+            Throughput: \textbf{11.4M pixels/s}
+        \end{alertblock}
+    \end{columns}
+\end{frame}
+
+\subsection{Renderização Interativa}
+
+\begin{frame}{Teste 2: Modo Interativo - Comparação Tripla}
+    \begin{block}{Configuração do Teste}
+        \begin{itemize}
+            \item Resolução: \textbf{1280x720} (HD)
+            \item Tempo de execução: $\sim$60-90 segundos por implementação
+            \item Medição: FPS instantâneo a cada segundo
+            \item Visualização: SDL2 com navegação 3D
+        \end{itemize}
+    \end{block}
+    
+    \vspace{0.3cm}
+    
+    \begin{center}
+        \begin{tabular}{lccc}
+            \toprule
+            \textbf{Métrica} & \textbf{Sequencial} & \textbf{OpenMP} & \textbf{CUDA} \\
+            \midrule
+            FPS Mínimo & 1.59 & 11.57 & 103.59 \\
+            FPS Médio & 6.89 & 45.23 & 177.84 \\
+            FPS Máximo & 19.83 & 118.69 & 228.09 \\
+            Desvio Padrão & 4.87 & 32.14 & 24.87 \\
+            \midrule
+            \textbf{Speedup vs Seq} & \textbf{1.00x} & \textbf{6.56x} & \textbf{25.81x} \\
+            \bottomrule
+        \end{tabular}
+    \end{center}
+\end{frame}
+
+\begin{frame}{Análise de Performance - FPS Interativo}
+    \begin{columns}
+        \column{0.33\textwidth}
+        \begin{block}{Sequencial}
+            \begin{itemize}
+                \item Média: \textbf{6.89 FPS}
+                \item Inviável para uso
+                \item Alto input lag
+                \item Experiência ruim
+            \end{itemize}
+        \end{block}
+        
+        \column{0.33\textwidth}
+        \begin{block}{OpenMP}
+            \begin{itemize}
+                \item Média: \textbf{45.23 FPS}
+                \item Usável
+                \item Instabilidade
+                \item \textbf{6.56x} speedup
+            \end{itemize}
+        \end{block}
+        
+        \column{0.33\textwidth}
+        \begin{block}{CUDA}
+            \begin{itemize}
+                \item Média: \textbf{177.84 FPS}
+                \item Muito fluido
+                \item Consistente
+                \item \textbf{25.81x} speedup
+            \end{itemize}
+        \end{block}
+    \end{columns}
+    
+    \vspace{0.5cm}
+    
+    \begin{alertblock}{Destaque}
+        CUDA é \textbf{3.93x} mais rápido que OpenMP e \textbf{25.81x} mais rápido que Sequencial
+    \end{alertblock}
+\end{frame}
+
+\begin{frame}{Visualização: FPS ao Longo do Tempo}
+    \begin{center}
+        \textbf{Gráfico gerado com Streamlit}
+        
+        \vspace{0.5cm}
+        
+        \fbox{
+            \begin{minipage}{0.9\textwidth}
+                \centering
+                \vspace{2cm}
+                \textit{[Inserir gráfico de linha do Streamlit]}
+                
+                \textit{comparar\_fps.py - FPS vs Tempo}
+                \vspace{2cm}
+            \end{minipage}
+        }
+        
+        \vspace{0.3cm}
+        
+        \small
+        \textbf{Observações:}
+        \begin{itemize}
+            \item Sequencial: Performance extremamente baixa e inconsistente
+            \item OpenMP: Grande variação devido a scheduling dinâmico
+            \item CUDA: Performance alta e estável (exceto picos de sincronização)
+        \end{itemize}
+    \end{center}
+\end{frame}
+
+\begin{frame}{Visualização: Distribuição de FPS}
+    \begin{center}
+        \textbf{Histogramas gerados com Streamlit}
+        
+        \vspace{0.5cm}
+        
+        \fbox{
+            \begin{minipage}{0.9\textwidth}
+                \centering
+                \vspace{2.5cm}
+                \textit{[Inserir histogramas lado a lado do Streamlit]}
+                
+                \textit{comparar\_fps.py - Distribuição de FPS}
+                \vspace{2.5cm}
+            \end{minipage}
+        }
+        
+        \vspace{0.3cm}
+        
+        \small
+        Análise das distribuições revela concentração de valores e variabilidade de cada implementação
+    \end{center}
+\end{frame}
+
+\subsection{Profiling CUDA}
+
+\begin{frame}[fragile]{Análise com nvprof}
+    \begin{block}{Comando}
+        \texttt{nvprof ./rayview\_cuda}
+    \end{block}
+    
+    \begin{columns}
+        \column{0.5\textwidth}
+        \begin{block}{GPU Activities}
+            \small
+            \begin{tabular}{lr}
+                \toprule
+                \textbf{Operação} & \textbf{Tempo} \\
+                \midrule
+                render\_kernel & 67.32\% \\
+                memcpy DtoH & 32.68\% \\
+                \bottomrule
+            \end{tabular}
+        \end{block}
+        
+        \column{0.5\textwidth}
+        \begin{block}{Métricas}
+            \begin{itemize}
+                \item 5034 chamadas ao kernel
+                \item Avg kernel: 2.59ms
+                \item Avg memcpy: 1.26ms
+                \item Total GPU: 19.36s
+            \end{itemize}
+        \end{block}
+    \end{columns}
+    
+    \vspace{0.3cm}
+    
+    \begin{alertblock}{Gargalo}
+        Transferência de memória consome \textbf{32.68\%} do tempo total - oportunidade de otimização
+    \end{alertblock}
+\end{frame}
+
+\begin{frame}{Análise dos Resultados}
+    \begin{block}{Por que CUDA é mais rápido?}
+        \begin{itemize}
+            \item \textbf{Massivamente paralelo}: Milhares de threads vs dezenas (OpenMP)
+            \item \textbf{Arquitetura especializada}: GPU otimizada para operações matemáticas paralelas
+            \item \textbf{Memória constante}: Esferas em \texttt{\_\_constant\_\_} com cache dedicado
+            \item \textbf{Latência escondida}: GPU executa warps enquanto outros aguardam memória
+            \item \textbf{SIMT}: Single Instruction Multiple Thread - mesma operação em paralelo
+        \end{itemize}
+    \end{block}
+    
+    \vspace{0.3cm}
+    
+    \begin{block}{Limitações do OpenMP}
+        \begin{itemize}
+            \item Limitado ao número de núcleos da CPU (tipicamente 4-16)
+            \item Overhead de sincronização e criação de threads
+            \item Variação de carga entre threads (schedule dynamic ajuda, mas não elimina)
+            \item Cache miss pode impactar significativamente
+        \end{itemize}
+    \end{block}
+\end{frame}
+
+\subsection{Testes Futuros}
+
+\begin{frame}[fragile]{Teste em Andamento: Schedule Static vs Dynamic}
+    \begin{block}{Motivação}
+        Avaliar impacto do tipo de scheduling no OpenMP para modo interativo
+    \end{block}
+    
+    \vspace{0.3cm}
+    
+    \begin{columns}
+        \column{0.5\textwidth}
+        \begin{block}{Schedule Dynamic}
+            \texttt{\#pragma omp parallel for}
+            
+            \texttt{schedule(dynamic)}
+            
+            \vspace{0.2cm}
+            
+            \begin{itemize}
+                \item Balanceamento dinamico
+                \item Overhead maior
+                \item Melhor para carga irregular
+            \end{itemize}
+        \end{block}
+        
+        \column{0.5\textwidth}
+        \begin{block}{Schedule Static}
+            \texttt{\#pragma omp parallel for}
+            
+            \texttt{schedule(static)}
+            
+            \vspace{0.2cm}
+            
+            \begin{itemize}
+                \item Divisao fixa
+                \item Overhead menor
+                \item Previsivel
+            \end{itemize}
+        \end{block}
+    \end{columns}
+    
+    \vspace{0.3cm}
+    
+    \begin{alertblock}{Status}
+        Teste planejado - resultados serão adicionados
+    \end{alertblock}
+\end{frame}
+
+\begin{frame}{Placeholder: Resultados Schedule Static}
+    \begin{center}
+        \fbox{
+            \begin{minipage}{0.85\textwidth}
+                \centering
+                \vspace{2cm}
+                \textit{[Espaço reservado para gráfico Streamlit]}
+                
+                \textbf{Comparação: Dynamic vs Static Scheduling}
+                
+                \textit{Dados serão adicionados após execução do teste}
+                \vspace{2cm}
+            \end{minipage}
+        }
+        
+        \vspace{0.5cm}
+        
+        \begin{tabular}{lccc}
+            \toprule
+            \textbf{Métrica} & \textbf{Dynamic} & \textbf{Static} & \textbf{Diferença} \\
+            \midrule
+            FPS Médio & 45.23 & ? & ? \\
+            Desvio Padrão & 32.14 & ? & ? \\
+            FPS Mínimo & 11.57 & ? & ? \\
+            \bottomrule
+        \end{tabular}
+    \end{center}
+\end{frame}
+
+% Conclusão
+\section{Conclusão}
+
+\begin{frame}{Conclusões}
+    \begin{block}{Aprendizados}
+        \begin{itemize}
+            \item Ray tracing é excelente caso de uso para paralelização
+            \item OpenMP oferece paralelização simples e efetiva para CPU
+            \item CUDA demonstra poder da GPU para computação paralela massiva
+            \item Versão interativa permite validação visual dos resultados
+            \item Ferramentas de visualização (Streamlit) facilitam análise de performance
+        \end{itemize}
+    \end{block}
+    
+    \vspace{0.3cm}
+    
+    \begin{alertblock}{Resultados Quantitativos}
+        \begin{itemize}
+            \item \textbf{Renderização 4K}: OpenMP 2.80x mais rápido (2.04s $\rightarrow$ 0.73s)
+            \item \textbf{Interativo Sequencial}: 6.89 FPS - Inviável
+            \item \textbf{Interativo OpenMP}: 45.23 FPS - Speedup 6.56x
+            \item \textbf{Interativo CUDA}: 177.84 FPS - Speedup 25.81x vs Seq / 3.93x vs OMP
+            \item \textbf{Tempo real}: Apenas CUDA atinge $>$ 60 FPS consistentemente
+        \end{itemize}
+    \end{alertblock}
+\end{frame}
+
+\begin{frame}{Trabalhos Futuros}
+    \begin{itemize}
+        \item \textbf{Completar testes de scheduling}:
+        \begin{itemize}
+            \item Static vs Dynamic no modo interativo
+            \item Guided e outras políticas
+            \item Chunk size otimizado
+        \end{itemize}
+        
+        \item \textbf{Otimizações CUDA}:
+        \begin{itemize}
+            \item Reduzir transferências de memória (double buffering)
+            \item Shared memory para dados temporários
+            \item Otimizar tamanho de bloco
+        \end{itemize}
+        
+        \item \textbf{Estruturas de aceleração}:
+        \begin{itemize}
+            \item BVH (Bounding Volume Hierarchy) para acelerar interseções
+            \item KD-Tree ou Octree
+        \end{itemize}
+        
+        \item \textbf{Algoritmos avançados}:
+        \begin{itemize}
+            \item Path tracing para iluminação mais realística
+            \item Denoising com IA
+        \end{itemize}
+        
+        \item \textbf{Distribuição}:
+        \begin{itemize}
+            \item MPI para cluster de máquinas
+            \item Híbrido CPU+GPU
+        \end{itemize}
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{Ferramentas Utilizadas}
+    \begin{columns}
+        \column{0.5\textwidth}
+        \begin{block}{Desenvolvimento}
+            \begin{itemize}
+                \item GCC/G++ com OpenMP
+                \item NVCC (CUDA Toolkit)
+                \item SDL2 para visualização
+                \item nvprof para profiling
+            \end{itemize}
+        \end{block}
+        
+        \column{0.5\textwidth}
+        \begin{block}{Análise}
+            \begin{itemize}
+                \item Python + Streamlit
+                \item Pandas para dados
+                \item Plotly para gráficos
+                \item CSV para métricas
+            \end{itemize}
+        \end{block}
+    \end{columns}
+    
+    \vspace{0.5cm}
+    
+    \begin{alertblock}{Dashboard Streamlit}
+        \texttt{comparar\_fps.py} - Visualização interativa de métricas com:
+        \begin{itemize}
+            \item Gráficos de linha temporais
+            \item Histogramas de distribuição
+            \item Tabelas estatísticas comparativas
+        \end{itemize}
+    \end{alertblock}
+\end{frame}
+
+\begin{frame}{Referências}
+    \begin{itemize}
+        \item Scratchapixel - Ray Tracing Tutorial (\url{https://www.scratchapixel.com})
+        \item NVIDIA CUDA Programming Guide
+        \item OpenMP Specification 5.0
+        \item SDL2 Documentation
+        \item Peter Shirley - Ray Tracing in One Weekend
+        \item Streamlit Documentation (\url{https://streamlit.io})
+    \end{itemize}
+    
+    \vspace{0.5cm}
+    
+    \begin{block}{Repositório}
+        Código e dados disponíveis em: \texttt{seminario-ppd}
+    \end{block}
+    
+    \vspace{0.5cm}
+    
+    \begin{center}
+        \Large
+        \textbf{Obrigado!}
+        
+        \vspace{0.5cm}
+        
+        \normalsize
+        Perguntas?
+    \end{center}
+\end{frame}
+
+\end{document}

@@ -1,0 +1,3 @@
+time(s),tipo
+2.043,seq
+0.729,omp

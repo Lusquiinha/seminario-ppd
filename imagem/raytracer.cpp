@@ -30,6 +30,8 @@
 #include <cstring>
 #include <sys/time.h>
 
+// compilar: g++ -o raytracer -O3 -Wall raytracer.cpp -lm
+
 #if defined __linux__ || defined __APPLE__
 // "Compiled for Linux
 #else

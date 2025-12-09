@@ -1,0 +1,19 @@
+==2017338== Profiling application: ./rayview_cuda
+==2017338== Profiling result:
+            Type  Time(%)      Time     Calls       Avg       Min       Max  Name
+ GPU activities:   67.32%  13.0350s      5034  2.5894ms  1.0135ms  18.431ms  render_kernel(Vec3f*, unsigned int, unsigned int, int, Camera, float, float, float, float)
+                   32.68%  6.32632s      5034  1.2567ms  1.0615ms  4.7563ms  [CUDA memcpy DtoH]
+                    0.00%  1.5040us         1  1.5040us  1.5040us  1.5040us  [CUDA memcpy HtoD]
+      API calls:   64.37%  13.1335s      5034  2.6090ms  1.0072ms  18.435ms  cudaDeviceSynchronize
+                   34.15%  6.96906s      5034  1.3844ms  1.1746ms  4.9144ms  cudaMemcpy
+                    0.81%  164.28ms      5034  32.634us  19.112us  1.4174ms  cudaLaunchKernel
+                    0.66%  134.80ms         1  134.80ms  134.80ms  134.80ms  cudaMalloc
+                    0.01%  2.6551ms       101  26.288us      97ns  1.5008ms  cuDeviceGetAttribute
+                    0.00%  319.92us         1  319.92us  319.92us  319.92us  cudaFree
+                    0.00%  21.483us         1  21.483us  21.483us  21.483us  cuDeviceGetName
+                    0.00%  15.125us         1  15.125us  15.125us  15.125us  cudaMemcpyToSymbol
+                    0.00%  6.5090us         2  3.2540us     139ns  6.3700us  cuDeviceGet
+                    0.00%  3.2420us         1  3.2420us  3.2420us  3.2420us  cuDeviceGetPCIBusId
+                    0.00%  1.5880us         3     529ns     169ns  1.0820us  cuDeviceGetCount
+                    0.00%     498ns         1     498ns     498ns     498ns  cuDeviceTotalMem
+                    0.00%     484ns         1     484ns     484ns     484ns  cuDeviceGetUuid
