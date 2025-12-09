@@ -282,31 +282,7 @@ __global__ void render_kernel(Vec3f *image, unsigned width,
     \end{columns}
 \end{frame}
 
-\begin{frame}[fragile]{Sistema de Câmera}
-    \begin{lstlisting}[language=C]
-typedef struct {
-    Vec3f pos;       // Posicao da camera
-    Vec3f forward;   // Direcao para frente
-    Vec3f right;     // Direcao para direita
-    Vec3f up;        // Direcao para cima
-    float pitch;     // Rotacao vertical (radianos)
-    float yaw;       // Rotacao horizontal (radianos)
-} Camera;
-
-void camera_update_vectors(Camera *cam) {
-    // Calcula forward baseado em yaw e pitch
-    cam->forward.x = cosf(cam->pitch) * sinf(cam->yaw);
-    cam->forward.y = sinf(cam->pitch);
-    cam->forward.z = -cosf(cam->pitch) * cosf(cam->yaw);
-    cam->forward = vec_normalize(cam->forward);
-    
-    // Calcula right e up com produtos vetoriais
-    Vec3f worldUp = { 0.0f, 1.0f, 0.0f };
-    cam->right = vec_cross(cam->forward, worldUp);
-    cam->up = vec_cross(cam->right, cam->forward);
-}
-    \end{lstlisting}
-\end{frame}
+\subsection{OpenMP Interativo}
 
 \begin{frame}{raytracer\_interativo.c - Versão Unificada}
     \begin{block}{Características}
@@ -354,8 +330,124 @@ void camera_update_vectors(Camera *cam) {
     \end{alertblock}
 \end{frame}
 
+\subsection{CUDA Interativo}
+
+\begin{frame}[fragile]{Sistema de Câmera}
+    \begin{lstlisting}[language=C]
+typedef struct {
+    Vec3f pos;       // Posicao da camera
+    Vec3f forward;   // Direcao para frente
+    Vec3f right;     // Direcao para direita
+    Vec3f up;        // Direcao para cima
+    float pitch;     // Rotacao vertical (radianos)
+    float yaw;       // Rotacao horizontal (radianos)
+} Camera;
+
+void camera_update_vectors(Camera *cam) {
+    // Calcula forward baseado em yaw e pitch
+    cam->forward.x = cosf(cam->pitch) * sinf(cam->yaw);
+    cam->forward.y = sinf(cam->pitch);
+    cam->forward.z = -cosf(cam->pitch) * cosf(cam->yaw);
+    cam->forward = vec_normalize(cam->forward);
+    
+    // Calcula right e up com produtos vetoriais
+    Vec3f worldUp = { 0.0f, 1.0f, 0.0f };
+    cam->right = vec_cross(cam->forward, worldUp);
+    cam->up = vec_cross(cam->right, cam->forward);
+}
+    \end{lstlisting}
+\end{frame}
+
+\begin{frame}[fragile]{CUDA - raytracer\_interativo.cu}
+    \begin{block}{Kernel CUDA}
+        Função executada na GPU por milhares de threads simultaneamente
+    \end{block}
+    
+    \begin{lstlisting}[language=C++]
+__global__ void render_kernel(Vec3f *image, unsigned width, 
+                              unsigned height, int numSpheres,
+                              Camera cam, float invWidth, 
+                              float invHeight, float angle,
+                              float angleAspect) {
+    unsigned x = blockIdx.x * blockDim.x + threadIdx.x;
+    unsigned y = blockIdx.y * blockDim.y + threadIdx.y;
+    
+    if (x >= width || y >= height) return;
+    
+    // Calcula direcao do raio
+    Vec3f raydir = vec_add(cam.forward, 
+                   vec_add(vec_mul_scalar(cam.right, xx),
+                           vec_mul_scalar(cam.up, yy)));
+    raydir = vec_normalize(raydir);
+    
+    image[y * width + x] = trace(cam.pos, raydir, 
+                                  d_const_spheres, numSpheres, 0);
+}
+    \end{lstlisting}
+\end{frame}
+
+\begin{frame}{CUDA Interativo - Otimizações}
+    \begin{itemize}
+        \item \textbf{Memória Constante}: Esferas armazenadas em \texttt{\_\_constant\_\_}
+        \begin{itemize}
+            \item Acesso mais rápido para dados read-only
+            \item Cache dedicado
+        \end{itemize}
+        
+        \item \textbf{Grid 2D}: Blocos de 16x16 threads
+        \begin{itemize}
+            \item Mapeamento direto pixel $\leftrightarrow$ thread
+            \item Otimizado para warps (32 threads)
+        \end{itemize}
+        
+        \item \textbf{Funções Device}: \texttt{\_\_device\_\_} para operações vetoriais
+        
+        \item \textbf{Transferência de Dados}: Minimizada ao essencial
+        
+        \item \textbf{Sincronização}: cudaDeviceSynchronize após cada frame
+    \end{itemize}
+    
+    \vspace{0.3cm}
+    
+    \begin{alertblock}{Compilação}
+        \texttt{nvcc -O3 -o rayview\_cuda raytracer\_interativo.cu `sdl2-config --cflags --libs`}
+    \end{alertblock}
+\end{frame}
+
 % Resultados
 \section{Resultados}
+
+\subsection{Ferramentas de Análise}
+
+\begin{frame}{Ferramentas Utilizadas}
+    \begin{columns}
+        \column{0.5\textwidth}
+        \begin{block}{Compilação e Execução}
+            \begin{itemize}
+                \item \textbf{GCC}: Versões sequencial e OpenMP
+                \item \textbf{NVCC}: Compilador CUDA
+                \item \textbf{SDL2}: Visualização interativa
+                \item \textbf{OpenMP 5.0}: Paralelização CPU
+            \end{itemize}
+        \end{block}
+        
+        \column{0.5\textwidth}
+        \begin{block}{Profiling e Análise}
+            \begin{itemize}
+                \item \textbf{nvprof}: Profiling GPU
+                \item \textbf{time/gettimeofday}: Medição de tempo
+                \item \textbf{Python/Pandas}: Processamento de dados
+                \item \textbf{Streamlit}: Dashboard interativo
+            \end{itemize}
+        \end{block}
+    \end{columns}
+    
+    \vspace{0.3cm}
+    
+    \begin{alertblock}{Dashboard de Análise}
+        Script \texttt{benchmark.py} gera visualizações comparativas com Streamlit (gráficos de linha, histogramas, estatísticas)
+    \end{alertblock}
+\end{frame}
 
 \subsection{Renderização de Imagem Estática}
 
@@ -420,11 +512,11 @@ void camera_update_vectors(Camera *cam) {
             \textbf{Métrica} & \textbf{Sequencial} & \textbf{OpenMP} & \textbf{CUDA} \\
             \midrule
             FPS Mínimo & 1.59 & 11.57 & 103.59 \\
-            FPS Médio & 6.89 & 45.23 & 177.84 \\
+            FPS Médio & 6.99 & 38.47 & 175.41 \\
             FPS Máximo & 19.83 & 118.69 & 228.09 \\
-            Desvio Padrão & 4.87 & 32.14 & 24.87 \\
+            Desvio Padrão & 4.68 & 30.81 & 26.30 \\
             \midrule
-            \textbf{Speedup vs Seq} & \textbf{1.00x} & \textbf{6.56x} & \textbf{25.81x} \\
+            \textbf{Speedup vs Seq} & \textbf{1.00x} & \textbf{5.50x} & \textbf{25.08x} \\
             \bottomrule
         \end{tabular}
     \end{center}
@@ -435,7 +527,7 @@ void camera_update_vectors(Camera *cam) {
         \column{0.33\textwidth}
         \begin{block}{Sequencial}
             \begin{itemize}
-                \item Média: \textbf{6.89 FPS}
+                \item Média: \textbf{6.99 FPS}
                 \item Inviável para uso
                 \item Alto input lag
                 \item Experiência ruim
@@ -445,20 +537,20 @@ void camera_update_vectors(Camera *cam) {
         \column{0.33\textwidth}
         \begin{block}{OpenMP}
             \begin{itemize}
-                \item Média: \textbf{45.23 FPS}
+                \item Média: \textbf{38.47 FPS}
                 \item Usável
                 \item Instabilidade
-                \item \textbf{6.56x} speedup
+                \item \textbf{5.50x} speedup
             \end{itemize}
         \end{block}
         
         \column{0.33\textwidth}
         \begin{block}{CUDA}
             \begin{itemize}
-                \item Média: \textbf{177.84 FPS}
+                \item Média: \textbf{175.41 FPS}
                 \item Muito fluido
                 \item Consistente
-                \item \textbf{25.81x} speedup
+                \item \textbf{25.08x} speedup
             \end{itemize}
         \end{block}
     \end{columns}
@@ -466,13 +558,13 @@ void camera_update_vectors(Camera *cam) {
     \vspace{0.5cm}
     
     \begin{alertblock}{Destaque}
-        CUDA é \textbf{3.93x} mais rápido que OpenMP e \textbf{25.81x} mais rápido que Sequencial
+        CUDA é \textbf{4.56x} mais rápido que OpenMP e \textbf{25.08x} mais rápido que Sequencial
     \end{alertblock}
 \end{frame}
 
 \begin{frame}{Visualização: FPS ao Longo do Tempo}
     \begin{center}
-        \textbf{Gráfico gerado com Streamlit}
+        \textbf{Gráfico gerado com Streamlit (comparar\_fps.py)}
         
         \vspace{0.5cm}
         
@@ -480,9 +572,9 @@ void camera_update_vectors(Camera *cam) {
             \begin{minipage}{0.9\textwidth}
                 \centering
                 \vspace{2cm}
-                \textit{[Inserir gráfico de linha do Streamlit]}
+                \textit{[Gráfico de linha: FPS vs Tempo]}
                 
-                \textit{comparar\_fps.py - FPS vs Tempo}
+                \textit{Comando: streamlit run benchmark.py}
                 \vspace{2cm}
             \end{minipage}
         }
@@ -492,8 +584,9 @@ void camera_update_vectors(Camera *cam) {
         \small
         \textbf{Observações:}
         \begin{itemize}
-            \item Sequencial: Performance extremamente baixa e inconsistente
-            \item OpenMP: Grande variação devido a scheduling dinâmico
+            \item Sequencial: Performance extremamente baixa e inconsistente (degrada com o tempo)
+            \item OpenMP Dynamic: Grande variação devido a balanceamento de carga
+            \item OpenMP Static: Menor variação mas performance inferior
             \item CUDA: Performance alta e estável (exceto picos de sincronização)
         \end{itemize}
     \end{center}
@@ -501,7 +594,7 @@ void camera_update_vectors(Camera *cam) {
 
 \begin{frame}{Visualização: Distribuição de FPS}
     \begin{center}
-        \textbf{Histogramas gerados com Streamlit}
+        \textbf{Histogramas e estatísticas - Dashboard Streamlit}
         
         \vspace{0.5cm}
         
@@ -509,9 +602,9 @@ void camera_update_vectors(Camera *cam) {
             \begin{minipage}{0.9\textwidth}
                 \centering
                 \vspace{2.5cm}
-                \textit{[Inserir histogramas lado a lado do Streamlit]}
+                \textit{[Histogramas de distribuição de FPS]}
                 
-                \textit{comparar\_fps.py - Distribuição de FPS}
+                \textit{4 implementações: Seq, OMP Dynamic, OMP Static, CUDA}
                 \vspace{2.5cm}
             \end{minipage}
         }
@@ -587,7 +680,7 @@ void camera_update_vectors(Camera *cam) {
 
 \subsection{Testes Futuros}
 
-\begin{frame}[fragile]{Teste em Andamento: Schedule Static vs Dynamic}
+\begin{frame}[fragile]{Teste 3: Schedule Static vs Dynamic}
     \begin{block}{Motivação}
         Avaliar impacto do tipo de scheduling no OpenMP para modo interativo
     \end{block}
@@ -628,38 +721,77 @@ void camera_update_vectors(Camera *cam) {
     
     \vspace{0.3cm}
     
-    \begin{alertblock}{Status}
-        Teste planejado - resultados serão adicionados
+    \begin{alertblock}{Resultado}
+        Dynamic é \textbf{1.27x} mais rápido que Static no modo interativo
     \end{alertblock}
 \end{frame}
 
-\begin{frame}{Placeholder: Resultados Schedule Static}
+\begin{frame}{Resultados: Dynamic vs Static Scheduling}
+    \begin{table}
+        \centering
+        \begin{tabular}{lrrr}
+            \toprule
+            \textbf{Métrica} & \textbf{Dynamic} & \textbf{Static} & \textbf{Diferença} \\
+            \midrule
+            Média (FPS) & 38.47 & 30.25 & +27.2\% \\
+            Mediana (FPS) & 26.11 & 25.45 & +2.6\% \\
+            Desvio Padrão & 30.81 & 20.01 & +54.0\% \\
+            Mínimo (FPS) & 11.57 & 9.86 & +17.3\% \\
+            Máximo (FPS) & 118.69 & 104.17 & +13.9\% \\
+            \bottomrule
+        \end{tabular}
+        \caption{Comparação entre scheduling dynamic e static (OpenMP)}
+    \end{table}
+    
+    \vspace{0.3cm}
+    
     \begin{center}
         \fbox{
             \begin{minipage}{0.85\textwidth}
                 \centering
-                \vspace{2cm}
-                \textit{[Espaço reservado para gráfico Streamlit]}
+                \vspace{1.5cm}
+                \textit{[Gráfico Streamlit: FPS ao longo do tempo]}
                 
-                \textbf{Comparação: Dynamic vs Static Scheduling}
-                
-                \textit{Dados serão adicionados após execução do teste}
-                \vspace{2cm}
+                \textbf{Dynamic vs Static Scheduling}
+                \vspace{1.5cm}
             \end{minipage}
         }
         
-        \vspace{0.5cm}
+        \vspace{0.3cm}
         
-        \begin{tabular}{lccc}
-            \toprule
-            \textbf{Métrica} & \textbf{Dynamic} & \textbf{Static} & \textbf{Diferença} \\
-            \midrule
-            FPS Médio & 45.23 & ? & ? \\
-            Desvio Padrão & 32.14 & ? & ? \\
-            FPS Mínimo & 11.57 & ? & ? \\
-            \bottomrule
-        \end{tabular}
+        \small
+        \textit{Resolução: 1280x720 | Mesma cena utilizada nos testes anteriores}
     \end{center}
+\end{frame}
+
+\begin{frame}{Análise: Dynamic vs Static}
+    \begin{columns}
+        \column{0.5\textwidth}
+        \begin{block}{Vantagens Dynamic}
+            \begin{itemize}
+                \item Média 27\% superior
+                \item Melhor aproveitamento dos núcleos
+                \item Balanceamento de carga mais eficiente
+                \item Adaptação a variações de complexidade por linha
+            \end{itemize}
+        \end{block}
+        
+        \column{0.5\textwidth}
+        \begin{block}{Vantagens Static}
+            \begin{itemize}
+                \item Menor variabilidade (desvio padrão)
+                \item Performance mais previsível
+                \item Menor overhead de gerenciamento
+                \item Melhor para carga uniforme
+            \end{itemize}
+        \end{block}
+    \end{columns}
+    
+    \vspace{0.5cm}
+    
+    \begin{alertblock}{Conclusão}
+        Para ray tracing interativo, \textbf{schedule(dynamic)} é superior devido à natureza variável da complexidade por scanline (reflexões, refrações).
+    \end{alertblock}
 \end{frame}
 
 % Conclusão
@@ -681,9 +813,10 @@ void camera_update_vectors(Camera *cam) {
     \begin{alertblock}{Resultados Quantitativos}
         \begin{itemize}
             \item \textbf{Renderização 4K}: OpenMP 2.80x mais rápido (2.04s $\rightarrow$ 0.73s)
-            \item \textbf{Interativo Sequencial}: 6.89 FPS - Inviável
-            \item \textbf{Interativo OpenMP}: 45.23 FPS - Speedup 6.56x
-            \item \textbf{Interativo CUDA}: 177.84 FPS - Speedup 25.81x vs Seq / 3.93x vs OMP
+            \item \textbf{Interativo Sequencial}: 6.99 FPS - Inviável
+            \item \textbf{Interativo OpenMP}: 38.47 FPS - Speedup 5.50x
+            \item \textbf{Interativo CUDA}: 175.41 FPS - Speedup 25.08x vs Seq / 4.56x vs OMP
+            \item \textbf{Scheduling}: Dynamic 27\% mais rápido que Static (38.47 vs 30.25 FPS)
             \item \textbf{Tempo real}: Apenas CUDA atinge $>$ 60 FPS consistentemente
         \end{itemize}
     \end{alertblock}
@@ -691,13 +824,6 @@ void camera_update_vectors(Camera *cam) {
 
 \begin{frame}{Trabalhos Futuros}
     \begin{itemize}
-        \item \textbf{Completar testes de scheduling}:
-        \begin{itemize}
-            \item Static vs Dynamic no modo interativo
-            \item Guided e outras políticas
-            \item Chunk size otimizado
-        \end{itemize}
-        
         \item \textbf{Otimizações CUDA}:
         \begin{itemize}
             \item Reduzir transferências de memória (double buffering)
