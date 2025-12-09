@@ -4,13 +4,15 @@
 #include <stdbool.h>
 #include <SDL2/SDL.h>
 
+// compilar: gcc -O2 -o rayview_omp raytracer_interativo.c -lm -fopenmp `sdl2-config --cflags --libs`
+
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 #endif
 
 #define MAX_RAY_DEPTH 5
-#define WIDTH 640
-#define HEIGHT 480
+#define WIDTH 1280
+#define HEIGHT 720
 
 /* ======== Estruturas ======== */
 
@@ -473,8 +475,12 @@ int main(int argc, char *argv[]) {
     printf("  ESC: Sair\n");
     printf("  Clique: Capturar/Liberar mouse\n\n");
     
-    // Loop principal
     Uint32 frameStart, frameTime;
+    int frameCount = 0;
+    Uint32 fpsTimer = SDL_GetTicks();
+    float avgFPS = 0.0f;
+    
+    // Loop principal
     while (running) {
         frameStart = SDL_GetTicks();
         
@@ -579,9 +585,14 @@ int main(int argc, char *argv[]) {
         // }
         
         // Mostra FPS no terminal
-        if (frameTime > 0) {
-            printf("\rFPS: %.1f   ", 1000.0f / frameTime);
+        frameCount++;
+        Uint32 currentTime = SDL_GetTicks();
+        if (currentTime - fpsTimer >= 1000) {
+            avgFPS = frameCount * 1000.0f / (currentTime - fpsTimer);
+            printf("\rFPS: %.2f | Frame Time: %.2f ms   ", avgFPS, 1000.0f / avgFPS);
             fflush(stdout);
+            frameCount = 0;
+            fpsTimer = currentTime;
         }
     }
     
