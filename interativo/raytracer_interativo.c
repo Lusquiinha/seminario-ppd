@@ -4,7 +4,7 @@
 #include <stdbool.h>
 #include <SDL2/SDL.h>
 
-// compilar: gcc -O2 -o rayview_omp raytracer_interativo.c -lm -fopenmp `sdl2-config --cflags --libs`
+// compilar: gcc -O3 -o rayview_omp raytracer_interativo.c -lm -fopenmp `sdl2-config --cflags --libs`
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
