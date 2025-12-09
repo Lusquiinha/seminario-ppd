@@ -13,6 +13,7 @@ st.markdown("### Sequencial vs OpenMP vs CUDA")
 script_dir = Path(__file__).parent
 fps_seq_path = script_dir / 'fps_seq.txt'
 fps_omp_path = script_dir / 'fps_omp.txt'
+fps_omp_static_path = script_dir / 'fps_omp_static.txt'
 fps_cuda_path = script_dir / 'fps_cuda.txt'
 
 # Tenta ler os arquivos
@@ -25,9 +26,13 @@ try:
         dfs['Sequencial'] = pd.read_csv(fps_seq_path)
         names.append('Sequencial')
     
+    if fps_omp_static_path.exists():
+        dfs['OpenMP Static'] = pd.read_csv(fps_omp_static_path)
+        names.append('OpenMP Static')
+        
     if fps_omp_path.exists():
-        dfs['OpenMP'] = pd.read_csv(fps_omp_path)
-        names.append('OpenMP')
+        dfs['OpenMP Dynamic'] = pd.read_csv(fps_omp_path)
+        names.append('OpenMP Dynamic')
     
     if fps_cuda_path.exists():
         dfs['CUDA'] = pd.read_csv(fps_cuda_path)
@@ -38,7 +43,8 @@ try:
         st.info("""
         **Executar os programas:**
         - `./rayview_seq` (Sequencial - sem OpenMP)
-        - `./rayview_omp` (OpenMP - paralelo CPU)
+        - `./rayview_omp` (OpenMP Dynamic - paralelo CPU)
+        - `./rayview_omp_static` (OpenMP Static - paralelo CPU)
         - `./rayview_cuda` (CUDA - paralelo GPU)
         """)
         st.stop()
@@ -70,8 +76,14 @@ try:
                     "Speedup CUDA/Seq",
                     f"{speedup:.2f}x"
                 )
-            elif 'OpenMP' in dfs:
-                speedup = dfs['OpenMP']['FPS'].mean() / base_fps
+            elif 'OpenMP Static' in dfs:
+                speedup = dfs['OpenMP Static']['FPS'].mean() / base_fps
+                st.metric(
+                    "Speedup OMP/Seq",
+                    f"{speedup:.2f}x"
+                )
+            elif 'OpenMP Dynamic' in dfs:
+                speedup = dfs['OpenMP Dynamic']['FPS'].mean() / base_fps
                 st.metric(
                     "Speedup OMP/Seq",
                     f"{speedup:.2f}x"
@@ -84,7 +96,12 @@ try:
     
     fig = go.Figure()
     
-    colors = {'Sequencial': '#d62728', 'OpenMP': '#1f77b4', 'CUDA': '#ff7f0e'}
+    colors = {
+        'Sequencial': '#d62728', 
+        'OpenMP Dynamic': '#1f77b4', 
+        'OpenMP Static': '#2ca02c',
+        'CUDA': '#ff7f0e'
+    }
     
     for name in names:
         fig.add_trace(go.Scatter(
@@ -169,17 +186,22 @@ except FileNotFoundError as e:
        ./rayview_seq
        ```
     
-    2. Execute a versão OpenMP:
+    2. Execute a versão OpenMP Dynamic:
        ```bash
        ./rayview_omp
        ```
     
-    3. Execute a versão CUDA:
+    3. Execute a versão OpenMP Static:
+       ```bash
+       ./rayview_omp_static
+       ```
+    
+    4. Execute a versão CUDA:
        ```bash
        ./rayview_cuda
        ```
     
-    4. Execute este dashboard novamente.
+    5. Execute este dashboard novamente.
     """)
 except Exception as e:
     st.error(f"❌ Erro ao processar os dados: {e}")
