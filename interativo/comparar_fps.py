@@ -3,57 +3,79 @@ import pandas as pd
 import plotly.graph_objects as go
 import plotly.express as px
 from pathlib import Path
-import os
 
-st.set_page_config(page_title="Comparação FPS - OpenMP vs CUDA", layout="wide")
+st.set_page_config(page_title="Comparação FPS - Ray Tracer", layout="wide")
 
-st.title("📊 Comparação de Desempenho: OpenMP vs CUDA")
-st.markdown("### Ray Tracer Interativo - Análise de Performance")
+st.title("📊 Comparação de Desempenho: Ray Tracer")
+st.markdown("### Sequencial vs OpenMP vs CUDA")
 
 # Define o diretório correto
 script_dir = Path(__file__).parent
+fps_seq_path = script_dir / 'fps_seq.txt'
 fps_omp_path = script_dir / 'fps_omp.txt'
 fps_cuda_path = script_dir / 'fps_cuda.txt'
 
 # Tenta ler os arquivos
 try:
-    df_omp = pd.read_csv(fps_omp_path)
-    df_cuda = pd.read_csv(fps_cuda_path)
+    # Lê arquivos disponíveis
+    dfs = {}
+    names = []
     
-    # Verifica se os arquivos existem e têm dados
-    if df_omp.empty or df_cuda.empty:
-        st.error("❌ Um ou ambos os arquivos estão vazios. Execute os programas primeiro!")
+    if fps_seq_path.exists():
+        dfs['Sequencial'] = pd.read_csv(fps_seq_path)
+        names.append('Sequencial')
+    
+    if fps_omp_path.exists():
+        dfs['OpenMP'] = pd.read_csv(fps_omp_path)
+        names.append('OpenMP')
+    
+    if fps_cuda_path.exists():
+        dfs['CUDA'] = pd.read_csv(fps_cuda_path)
+        names.append('CUDA')
+    
+    if not dfs:
+        st.error("❌ Nenhum arquivo de FPS encontrado. Execute os programas primeiro!")
+        st.info("""
+        **Executar os programas:**
+        - `./rayview_seq` (Sequencial - sem OpenMP)
+        - `./rayview_omp` (OpenMP - paralelo CPU)
+        - `./rayview_cuda` (CUDA - paralelo GPU)
+        """)
         st.stop()
     
     # Iguala o número de registros (pega o mínimo)
-    min_records = min(len(df_omp), len(df_cuda))
-    df_omp = df_omp.iloc[:min_records]
-    df_cuda = df_cuda.iloc[:min_records]
+    min_records = min(len(df) for df in dfs.values())
+    for name in dfs:
+        dfs[name] = dfs[name].iloc[:min_records]
     
     # Estatísticas gerais
-    col1, col2, col3 = st.columns(3)
+    num_cols = len(names) + (1 if 'Sequencial' in dfs and len(names) > 1 else 0)
+    cols = st.columns(num_cols)
     
-    with col1:
-        st.metric(
-            "FPS Médio - OpenMP",
-            f"{df_omp['FPS'].mean():.2f}",
-            delta=None
-        )
+    for idx, name in enumerate(names):
+        with cols[idx]:
+            fps_mean = dfs[name]['FPS'].mean()
+            st.metric(
+                f"FPS Médio - {name}",
+                f"{fps_mean:.2f}"
+            )
     
-    with col2:
-        st.metric(
-            "FPS Médio - CUDA",
-            f"{df_cuda['FPS'].mean():.2f}",
-            delta=f"{((df_cuda['FPS'].mean() / df_omp['FPS'].mean() - 1) * 100):.1f}%"
-        )
-    
-    with col3:
-        speedup = df_cuda['FPS'].mean() / df_omp['FPS'].mean()
-        st.metric(
-            "Speedup CUDA/OpenMP",
-            f"{speedup:.2f}x",
-            delta=None
-        )
+    # Speedup relativo ao sequencial (se existir)
+    if 'Sequencial' in dfs and len(names) > 1:
+        with cols[-1]:
+            base_fps = dfs['Sequencial']['FPS'].mean()
+            if 'CUDA' in dfs:
+                speedup = dfs['CUDA']['FPS'].mean() / base_fps
+                st.metric(
+                    "Speedup CUDA/Seq",
+                    f"{speedup:.2f}x"
+                )
+            elif 'OpenMP' in dfs:
+                speedup = dfs['OpenMP']['FPS'].mean() / base_fps
+                st.metric(
+                    "Speedup OMP/Seq",
+                    f"{speedup:.2f}x"
+                )
     
     st.markdown("---")
     
@@ -62,23 +84,17 @@ try:
     
     fig = go.Figure()
     
-    fig.add_trace(go.Scatter(
-        x=df_omp['Tempo(s)'],
-        y=df_omp['FPS'],
-        mode='lines+markers',
-        name='OpenMP',
-        line=dict(color='#1f77b4', width=2),
-        marker=dict(size=6)
-    ))
+    colors = {'Sequencial': '#d62728', 'OpenMP': '#1f77b4', 'CUDA': '#ff7f0e'}
     
-    fig.add_trace(go.Scatter(
-        x=df_cuda['Tempo(s)'],
-        y=df_cuda['FPS'],
-        mode='lines+markers',
-        name='CUDA',
-        line=dict(color='#ff7f0e', width=2),
-        marker=dict(size=6)
-    ))
+    for name in names:
+        fig.add_trace(go.Scatter(
+            x=dfs[name]['Tempo(s)'],
+            y=dfs[name]['FPS'],
+            mode='lines+markers',
+            name=name,
+            line=dict(color=colors[name], width=2),
+            marker=dict(size=6)
+        ))
     
     fig.update_layout(
         xaxis_title="Tempo (segundos)",
@@ -95,59 +111,76 @@ try:
     
     st.plotly_chart(fig, use_container_width=True)
     
-    # Gráficos lado a lado
-    col1, col2 = st.columns(2)
+    # Gráficos de distribuição
+    st.subheader("📊 Distribuição de FPS")
     
-    with col1:
-        st.subheader("📊 Distribuição de FPS - OpenMP")
-        fig_hist_omp = px.histogram(
-            df_omp,
-            x='FPS',
-            nbins=30,
-            color_discrete_sequence=['#1f77b4']
-        )
-        fig_hist_omp.update_layout(
-            xaxis_title="FPS",
-            yaxis_title="Frequência",
-            showlegend=False,
-            height=350
-        )
-        st.plotly_chart(fig_hist_omp, use_container_width=True)
+    cols_dist = st.columns(len(names))
     
-    with col2:
-        st.subheader("📊 Distribuição de FPS - CUDA")
-        fig_hist_cuda = px.histogram(
-            df_cuda,
-            x='FPS',
-            nbins=30,
-            color_discrete_sequence=['#ff7f0e']
-        )
-        fig_hist_cuda.update_layout(
-            xaxis_title="FPS",
-            yaxis_title="Frequência",
-            showlegend=False,
-            height=350
-        )
-        st.plotly_chart(fig_hist_cuda, use_container_width=True)
+    for idx, name in enumerate(names):
+        with cols_dist[idx]:
+            st.markdown(f"**{name}**")
+            fig_hist = px.histogram(
+                dfs[name],
+                x='FPS',
+                nbins=30,
+                color_discrete_sequence=[colors[name]]
+            )
+            fig_hist.update_layout(
+                xaxis_title="FPS",
+                yaxis_title="Frequência",
+                showlegend=False,
+                height=350
+            )
+            st.plotly_chart(fig_hist, use_container_width=True)
+    
+    # Tabela comparativa
+    st.subheader("📋 Resumo Estatístico")
+    
+    stats_data = []
+    for name in names:
+        stats_data.append({
+            'Implementação': name,
+            'FPS Médio': f"{dfs[name]['FPS'].mean():.2f}",
+            'FPS Mín': f"{dfs[name]['FPS'].min():.2f}",
+            'FPS Máx': f"{dfs[name]['FPS'].max():.2f}",
+            'Desvio Padrão': f"{dfs[name]['FPS'].std():.2f}",
+        })
+    
+    if 'Sequencial' in dfs:
+        base_fps = dfs['Sequencial']['FPS'].mean()
+        for row in stats_data:
+            impl = row['Implementação']
+            if impl != 'Sequencial':
+                speedup = dfs[impl]['FPS'].mean() / base_fps
+                row['Speedup vs Seq'] = f"{speedup:.2f}x"
+            else:
+                row['Speedup vs Seq'] = "1.00x"
+    
+    stats_df = pd.DataFrame(stats_data)
+    st.dataframe(stats_df, use_container_width=True, hide_index=True)
 
 except FileNotFoundError as e:
     st.error(f"❌ Arquivo não encontrado: {e}")
     st.info("""
     **Como gerar os arquivos:**
     
-    1. Execute a versão OpenMP:
+    1. Execute a versão Sequencial:
+       ```bash
+       ./rayview_seq
+       ```
+    
+    2. Execute a versão OpenMP:
        ```bash
        ./rayview_omp
        ```
     
-    2. Execute a versão CUDA:
+    3. Execute a versão CUDA:
        ```bash
        ./rayview_cuda
        ```
     
-    3. Execute este dashboard novamente.
+    4. Execute este dashboard novamente.
     """)
 except Exception as e:
     st.error(f"❌ Erro ao processar os dados: {e}")
     st.exception(e)
-
